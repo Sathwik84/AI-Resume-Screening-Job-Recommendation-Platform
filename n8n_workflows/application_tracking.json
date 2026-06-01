@@ -1,0 +1,165 @@
+{
+  "name": "ElevateResume - 4. Application Tracking Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "app-tracking",
+        "options": {}
+      },
+      "id": "node-webhook-listener",
+      "name": "Application Log Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notifications (user_id, message) VALUES (:user_id, :message);",
+        "additionalFields": {
+          "queryParams": "user_id={{$json.body.user_id}}, message=Recruiter tracker started for role '{{$json.body.job_title}}' at {{$json.body.company}}."
+        }
+      },
+      "id": "node-postgres-notif",
+      "name": "Log Tracking Start",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [420, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 7,
+        "unit": "days"
+      },
+      "id": "node-wait-seven-days",
+      "name": "Wait 7 Days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [630, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT status FROM applications WHERE id = :app_id;",
+        "additionalFields": {
+          "queryParams": "app_id={{$node[\"Application Log Event\"].json[\"body.application_id\"]}}"
+        }
+      },
+      "id": "node-check-db-status",
+      "name": "Re-check App Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [840, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.query_result[0].status}}",
+              "value2": "Applied"
+            }
+          ]
+        }
+      },
+      "id": "node-if-still-applied",
+      "name": "Is Status Still 'Applied'?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "placements@iare.edu.in",
+        "toEmail": "={{$node[\"Application Log Event\"].json[\"body.email\"]}}",
+        "subject": "ElevateResume - How is your Application progressing?",
+        "html": "<h3>Hello,</h3><p>It has been 7 days since you applied for the position of <b>{{$node[\"Application Log Event\"].json[\"body.job_title\"]}}</b> at <b>{{$node[\"Application Log Event\"].json[\"body.company\"]}}</b>.</p><p>We notice your application is still marked as 'Applied'. We recommend sending a quick, friendly follow-up email to the recruiter to reiterate your interest. Good luck!</p>",
+        "options": {}
+      },
+      "id": "node-followup-mailer",
+      "name": "Dispatch Recruiter Follow-up Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1280, 200],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred-id",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Application Log Event": {
+      "main": [
+        [
+          {
+            "node": "Log Tracking Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Tracking Start": {
+      "main": [
+        [
+          {
+            "node": "Wait 7 Days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 7 Days": {
+      "main": [
+        [
+          {
+            "node": "Re-check App Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-check App Status": {
+      "main": [
+        [
+          {
+            "node": "Is Status Still 'Applied'?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Status Still 'Applied'?": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Recruiter Follow-up Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "w4-application-tracking"
+}

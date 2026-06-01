@@ -1,0 +1,114 @@
+{
+  "name": "ElevateResume - 1. Resume Upload Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resume-upload",
+        "options": {}
+      },
+      "id": "node-webhook-trigger",
+      "name": "Webhook Listener",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "model": "llama3-8b-8192",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "node-ai-groq",
+      "name": "Groq LLM Skill Extractor",
+      "type": "n8n-nodes-base.chatOpenAi",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "groq-api-cred-id",
+          "name": "Groq Llama3 Cloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO resumes (user_id, filename, skills, parsed_text) VALUES (:user_id, :filename, :skills, :parsed_text);",
+        "additionalFields": {
+          "queryParams": "user_id={{$json.body.user_id}}, filename={{$json.body.filename}}, skills={{$json.skills_extracted}}, parsed_text={{$json.body.text}}"
+        }
+      },
+      "id": "node-postgres-writer",
+      "name": "Update PostgreSQL",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [680, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Prod Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "placements@iare.edu.in",
+        "toEmail": "={{$json.body.email}}",
+        "subject": "ElevateResume - Your Resume Analysis Report",
+        "html": "<h3>Hello {{$json.body.name}},</h3><p>Your resume <b>{{$json.body.filename}}</b> has been successfully parsed by our placement engine.</p><p><b>Detected Skills Matrix:</b><br>{{$json.skills_extracted}}</p><p>Your profile is now synced and optimized for ATS checks. Good luck!</p>",
+        "options": {}
+      },
+      "id": "node-gmail-notifier",
+      "name": "Dispatch Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred-id",
+          "name": "Gmail SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Listener": {
+      "main": [
+        [
+          {
+            "node": "Groq LLM Skill Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM Skill Extractor": {
+      "main": [
+        [
+          {
+            "node": "Update PostgreSQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update PostgreSQL": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "w1-resume-upload-report"
+}

@@ -1,0 +1,143 @@
+{
+  "name": "ElevateResume - 2. Daily Job Recommendation Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "everyDay",
+              "hour": 9
+            }
+          ]
+        }
+      },
+      "id": "node-cron-trigger",
+      "name": "Cron Daily 9AM",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, email, full_name, skills FROM users WHERE skills IS NOT NULL;"
+      },
+      "id": "node-fetch-users",
+      "name": "Fetch Students Skills",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [400, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Prod Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, title, company, required_skills, salary FROM job_descriptions ORDER BY created_at DESC LIMIT 5;"
+      },
+      "id": "node-fetch-jobs",
+      "name": "Fetch Active Jobs",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [600, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Prod Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama3-8b-8192",
+        "prompt": "You are a career matcher. Compare user skills: {{$node[\"Fetch Students Skills\"].json[\"skills\"]}} against job openings listings: {{$json.query_result}}. Filter and return only the top 3 matching roles as a bulleted lists.",
+        "options": {}
+      },
+      "id": "node-ai-matchmaker",
+      "name": "LLM Matching Analyst",
+      "type": "n8n-nodes-base.chatOpenAi",
+      "typeVersion": 1,
+      "position": [800, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "groq-api-cred-id",
+          "name": "Groq Llama3 Cloud"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "placements@iare.edu.in",
+        "toEmail": "={{$node[\"Fetch Students Skills\"].json[\"email\"]}}",
+        "subject": "ElevateResume - Daily Job Match Bulletin",
+        "html": "<h3>Good Morning {{$node[\"Fetch Students Skills\"].json[\"full_name\"]}},</h3><p>Here are your customized job recommendations for today, calculated by our AI matching engine based on your active skills portfolio:</p><p><b>AI Recommended Positions:</b><br>{{$json.output}}</p><p>Keep optimizing your resume scores to clear screener checks!</p>",
+        "options": {}
+      },
+      "id": "node-mailer",
+      "name": "Dispatch Daily Bulletin",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [1000, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred-id",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron Daily 9AM": {
+      "main": [
+        [
+          {
+            "node": "Fetch Students Skills",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Students Skills": {
+      "main": [
+        [
+          {
+            "node": "Fetch Active Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Active Jobs": {
+      "main": [
+        [
+          {
+            "node": "LLM Matching Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Matching Analyst": {
+      "main": [
+        [
+          {
+            "node": "Dispatch Daily Bulletin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "w2-daily-job-recommendation"
+}

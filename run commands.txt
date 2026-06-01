@@ -1,0 +1,5 @@
+node node_modules/vite/bin/vite.js 
+#frontend
+# Activate venv and boot Uvicorn server:
+.\venv\Scripts\activate; uvicorn app.main:app --reload --port 8000
+#backend

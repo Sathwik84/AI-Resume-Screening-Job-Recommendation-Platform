@@ -1,0 +1,124 @@
+{
+  "name": "ElevateResume - 3. ATS Monitoring Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ats-monitor",
+        "options": {}
+      },
+      "id": "node-webhook-listener",
+      "name": "Resume Updated Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/api/ats/calculate-ats",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "job_description_id",
+              "value": "={{$json.body.job_description_id}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-api-ats-recalc",
+      "name": "FastAPI Recalculate ATS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [420, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "app-jwt-bearer",
+          "name": "App JWT Bearer Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE ats_reports SET overall_score = :score, breakdown = :breakdown WHERE resume_id = :resume_id AND job_id = :job_id;",
+        "additionalFields": {
+          "queryParams": "score={{$node[\"FastAPI Recalculate ATS\"].json[\"overall_score\"]}}, breakdown={{JSON.stringify($node[\"FastAPI Recalculate ATS\"].json[\"breakdown\"])}}, resume_id={{$node[\"FastAPI Recalculate ATS\"].json[\"resume_id\"]}}, job_id={{$node[\"FastAPI Recalculate ATS\"].json[\"job_id\"]}}"
+        }
+      },
+      "id": "node-postgres-updater",
+      "name": "Update ATS Report Table",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [640, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-cred-id",
+          "name": "PostgreSQL Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "placements@iare.edu.in",
+        "toEmail": "={{$json.body.email}}",
+        "subject": "ElevateResume - ATS Score Updated!",
+        "html": "<h3>Hello,</h3><p>An updated resume was detected in your profile. We have recalculated your compatibility score for the role: <b>{{$json.body.job_title}}</b> at <b>{{$json.body.company}}</b>.</p><h4>New ATS Rating: <span style='color:#6366F1;'>{{$node[\"FastAPI Recalculate ATS\"].json[\"overall_score\"]}}%</span></h4><p>Log in to your student dashboard to review missing keyword suggestions.</p>",
+        "options": {}
+      },
+      "id": "node-email-notifier",
+      "name": "Notify Score Update",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [850, 300],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-cred-id",
+          "name": "SMTP Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Resume Updated Event": {
+      "main": [
+        [
+          {
+            "node": "FastAPI Recalculate ATS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FastAPI Recalculate ATS": {
+      "main": [
+        [
+          {
+            "node": "Update ATS Report Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update ATS Report Table": {
+      "main": [
+        [
+          {
+            "node": "Notify Score Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {},
+  "id": "w3-ats-monitoring"
+}
